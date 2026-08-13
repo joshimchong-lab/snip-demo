@@ -1,0 +1,40 @@
+name: Build bundle
+
+on:
+  schedule:
+    # Run every hour
+    - cron: '0 * * * *'
+  workflow_dispatch:
+
+# Note: This workflow is only present on the 'main' branch, so it won't fire for
+# push events on backend/frontend/cli branches. The push trigger isn't used here
+# because it would only fire from the branch where this file is committed (main),
+# not from pushes to other branches that trigger the build (backend/frontend/cli).
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout main with submodules
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          submodules: true
+          fetch-depth: 0
+      
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      
+      - name: Configure git with github-actions[bot] identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      
+      - name: Build and push bundle
+        run: node scripts/build-bundle.mjs --push
