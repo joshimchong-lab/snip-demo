@@ -1,0 +1,72 @@
+﻿<main class="page">
+  <section class="card">
+    <header class="header">
+      <h1>Snip</h1>
+      <p>Create short links from your browser.</p>
+    </header>
+
+    <form class="url-form" (ngSubmit)="onSubmit()">
+      <label for="url">URL</label>
+      <div class="row">
+        <input
+          id="url"
+          name="url"
+          type="url"
+          [(ngModel)]="urlInput"
+          placeholder="https://example.com"
+          required
+        />
+        <button type="submit" [disabled]="submitting()">
+          {{ submitting() ? 'Creating...' : 'Shorten' }}
+        </button>
+      </div>
+    </form>
+
+    @if (createdShortUrl()) {
+      <p class="success">
+        Short link:
+        <a [href]="createdShortUrl()" target="_blank" rel="noopener noreferrer">{{ createdShortUrl() }}</a>
+      </p>
+    }
+
+    @if (error()) {
+      <p class="error">{{ error() }}</p>
+    }
+
+    <section>
+      <div class="table-header">
+        <h2>All links</h2>
+        <button type="button" class="ghost" (click)="refreshLinks()" [disabled]="loading()">
+          {{ loading() ? 'Loading...' : 'Refresh' }}
+        </button>
+      </div>
+
+      @if (links().length === 0 && !loading()) {
+        <p class="empty">No links yet.</p>
+      } @else {
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Code</th>
+                <th>Original URL</th>
+                <th>Hits</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (link of links(); track link.code) {
+                <tr>
+                  <td>
+                    <a [href]="link.shortUrl" target="_blank" rel="noopener noreferrer">{{ link.code }}</a>
+                  </td>
+                  <td class="url">{{ link.url }}</td>
+                  <td>{{ link.hits }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+    </section>
+  </section>
+</main>
