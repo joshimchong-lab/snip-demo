@@ -1,4 +1,4 @@
-const { isAbsolute, join, normalize, relative } = require("node:path");
+const { isAbsolute, join, normalize, relative, resolve } = require("node:path");
 
 const links = new Map();
 const BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
@@ -6,7 +6,7 @@ const BASE62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const port = Number(process.env.PORT || 3000);
 const railwayDomain = process.env.RAILWAY_PUBLIC_DOMAIN;
 const baseUrl = process.env.BASE_URL || (railwayDomain ? `https://${railwayDomain}` : `http://localhost:${port}`);
-const publicDir = process.env.PUBLIC_DIR ? Bun.resolveSync(process.env.PUBLIC_DIR, process.cwd()) : null;
+const publicDir = process.env.PUBLIC_DIR ? resolve(process.env.PUBLIC_DIR) : null;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
