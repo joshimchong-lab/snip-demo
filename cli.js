@@ -1,199 +1,188 @@
 #!/usr/bin/env node
 
-const { spawn } = require("node:child_process");
+const http = require('http');
+const https = require('https');
+const url = require('url');
+const { exec } = require('child_process');
+const { platform } = require('os');
 
-const API_BASE = process.env.SNIP_API || "http://localhost:3000";
+const API_BASE = process.env.SNIP_API || 'http://localhost:3000';
 
-function usage() {
-  console.log(`snip - tiny URL shortener CLI
+function makeRequest(method, path, body = null) {
+  return new Promise((resolve, reject) => {
+    const parsedUrl = new url.URL(path, API_BASE);
+    const isHttps = parsedUrl.protocol === 'https:';
+    const client = isHttps ? https : http;
+
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: method,
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    };
+
+    const req = client.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => { data += chunk; });
+      res.on('end', () => {
+        resolve({ status: res.statusCode, headers: res.headers, body: data });
+      });
+    });
+
+    req.on('error', reject);
+    if (body) req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+function openInBrowser(target) {
+  const browserCmd = {
+    'linux': `xdg-open "${target}"`,
+    'darwin': `open "${target}"`,
+    'win32': `start "" "${target}"`
+  }[platform()];
+
+  if (!browserCmd) {
+    console.error(`Error: Unsupported platform for opening browser: ${platform()}`);
+    process.exit(1);
+  }
+
+  exec(browserCmd, (error) => {
+    if (error) {
+      console.error(`Error opening browser: ${error.message}`);
+      process.exit(1);
+    }
+  });
+}
+
+function printUsage() {
+  console.log(`Snip CLI - URL shortener
 
 Usage:
-  snip add <url>    Create a short link and print shortUrl
-  snip ls           List links as aligned code/hits/url table
-  snip open <code>  Resolve code and open destination in your browser
-  snip help         Show this help
+  snip add <url>    Shorten a URL
+  snip ls           List all shortened links
+  snip open <code>  Open a shortened link in browser
+  snip help         Show this help message
 
 Environment:
-  SNIP_API          Backend base URL (default: http://localhost:3000)`);
+  SNIP_API          API base URL (default: http://localhost:3000)`);
 }
 
-function exitWithError(message) {
-  console.error(message);
-  process.exit(1);
-}
+async function handleAdd(urlArg) {
+  if (!urlArg) {
+    console.error('Error: URL required');
+    process.exit(1);
+  }
 
-function parseHttpUrl(value) {
   try {
-    const url = new URL(value);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return null;
+    const res = await makeRequest('POST', '/api/links', { url: urlArg });
+    if (res.status !== 201) {
+      const error = res.body ? JSON.parse(res.body) : {};
+      console.error(`Error: ${error.message || 'Failed to shorten URL'}`);
+      process.exit(1);
     }
-    return url;
-  } catch {
-    return null;
-  }
-}
-
-async function requestJson(path, options = {}) {
-  let response;
-  try {
-    response = await fetch(`${API_BASE}${path}`, options);
+    const data = JSON.parse(res.body);
+    console.log(data.shortUrl);
   } catch (err) {
-    exitWithError(`Cannot reach backend at ${API_BASE}: ${err.message}`);
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
   }
+}
 
-  let body = null;
+async function handleLs() {
   try {
-    body = await response.json();
-  } catch {
-    body = null;
-  }
+    const res = await makeRequest('GET', '/api/links');
+    if (res.status !== 200) {
+      console.error('Error: Failed to fetch links');
+      process.exit(1);
+    }
+    const links = JSON.parse(res.body);
+    
+    if (!links || links.length === 0) {
+      console.log('No links yet.');
+      return;
+    }
 
-  if (!response.ok) {
-    const message = body && body.error ? body.error : `Request failed with status ${response.status}`;
-    exitWithError(message);
-  }
-
-  return body;
-}
-
-async function cmdAdd(url) {
-  const parsed = parseHttpUrl(url);
-  if (!parsed) {
-    exitWithError("Invalid URL. Use http:// or https://");
-  }
-
-  const data = await requestJson("/api/links", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ url: parsed.toString() }),
-  });
-
-  if (!data || !data.shortUrl) {
-    exitWithError("Backend response missing shortUrl");
-  }
-
-  console.log(data.shortUrl);
-}
-
-function pad(text, width) {
-  return String(text).padEnd(width, " ");
-}
-
-async function cmdList() {
-  const links = await requestJson("/api/links");
-
-  if (!Array.isArray(links) || links.length === 0) {
-    console.log("No links yet.");
-    return;
-  }
-
-  const codeWidth = Math.max("code".length, ...links.map((item) => String(item.code || "").length));
-  const hitsWidth = Math.max("hits".length, ...links.map((item) => String(item.hits ?? "").length));
-
-  console.log(`${pad("code", codeWidth)}  ${pad("hits", hitsWidth)}  url`);
-  for (const link of links) {
-    console.log(`${pad(link.code, codeWidth)}  ${pad(link.hits, hitsWidth)}  ${link.url}`);
-  }
-}
-
-function detectOpenCommand() {
-  if (process.platform === "win32") {
-    return { command: "cmd", args: ["/c", "start", "", "%URL%"] };
-  }
-  if (process.platform === "darwin") {
-    return { command: "open", args: ["%URL%"] };
-  }
-  return { command: "xdg-open", args: ["%URL%"] };
-}
-
-function openInBrowser(targetUrl) {
-  const opener = detectOpenCommand();
-  const args = opener.args.map((arg) => (arg === "%URL%" ? targetUrl : arg));
-
-  return new Promise((resolve, reject) => {
-    const child = spawn(opener.command, args, {
-      stdio: "ignore",
-      detached: process.platform !== "win32",
+    // Calculate column widths
+    let maxCode = 4, maxHits = 4, maxUrl = 3;
+    links.forEach(link => {
+      maxCode = Math.max(maxCode, (link.code || '').length);
+      maxHits = Math.max(maxHits, (link.hits || 0).toString().length);
+      maxUrl = Math.max(maxUrl, (link.url || '').length);
     });
 
-    child.on("error", reject);
-    child.on("spawn", () => {
-      if (process.platform !== "win32") {
-        child.unref();
-      }
-      resolve();
+    // Print header
+    console.log(`${'Code'.padEnd(maxCode)}  ${'Hits'.padEnd(maxHits)}  ${'URL'.padEnd(maxUrl)}`);
+    console.log(`${'-'.repeat(maxCode)}  ${'-'.repeat(maxHits)}  ${'-'.repeat(maxUrl)}`);
+
+    // Print rows
+    links.forEach(link => {
+      const code = (link.code || '').padEnd(maxCode);
+      const hits = (link.hits || 0).toString().padEnd(maxHits);
+      const uri = (link.url || '').padEnd(maxUrl);
+      console.log(`${code}  ${hits}  ${uri}`);
     });
-  });
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
+  }
 }
 
-async function cmdOpen(code) {
+async function handleOpen(code) {
   if (!code) {
-    exitWithError("Missing code. Usage: snip open <code>");
-  }
-
-  let response;
-  try {
-    response = await fetch(`${API_BASE}/${encodeURIComponent(code)}`, {
-      method: "GET",
-      redirect: "manual",
-    });
-  } catch (err) {
-    exitWithError(`Cannot reach backend at ${API_BASE}: ${err.message}`);
-  }
-
-  if (response.status === 404) {
-    exitWithError("Unknown short code");
-  }
-
-  if (response.status < 300 || response.status >= 400) {
-    exitWithError(`Expected redirect, got status ${response.status}`);
-  }
-
-  const location = response.headers.get("location");
-  if (!location) {
-    exitWithError("Redirect missing Location header");
+    console.error('Error: Code required');
+    process.exit(1);
   }
 
   try {
-    await openInBrowser(location);
+    const res = await makeRequest('GET', `/${code}`, null);
+    if (res.status !== 302 && res.status !== 301) {
+      console.error('Error: Link not found');
+      process.exit(1);
+    }
+    const location = res.headers.location;
+    if (!location) {
+      console.error('Error: Invalid redirect response');
+      process.exit(1);
+    }
+    openInBrowser(location);
   } catch (err) {
-    exitWithError(`Could not open browser: ${err.message}`);
+    console.error(`Error: ${err.message}`);
+    process.exit(1);
   }
-
-  console.log(location);
 }
 
 async function main() {
-  const command = process.argv[2];
-  const arg = process.argv[3];
+  const args = process.argv.slice(2);
 
-  if (!command || command === "help" || command === "--help" || command === "-h") {
-    usage();
+  if (args.length === 0 || args[0] === 'help' || args[0] === '--help' || args[0] === '-h') {
+    printUsage();
     return;
   }
 
-  if (command === "add") {
-    if (!arg) {
-      exitWithError("Missing URL. Usage: snip add <url>");
-    }
-    await cmdAdd(arg);
-    return;
-  }
+  const command = args[0];
 
-  if (command === "ls") {
-    await cmdList();
-    return;
+  switch (command) {
+    case 'add':
+      await handleAdd(args[1]);
+      break;
+    case 'ls':
+      await handleLs();
+      break;
+    case 'open':
+      await handleOpen(args[1]);
+      break;
+    default:
+      console.error(`Error: Unknown command '${command}'`);
+      printUsage();
+      process.exit(1);
   }
-
-  if (command === "open") {
-    await cmdOpen(arg);
-    return;
-  }
-
-  exitWithError(`Unknown command: ${command}`);
 }
 
-main().catch((err) => {
-  exitWithError(err && err.message ? err.message : "Unknown error");
+main().catch(err => {
+  console.error(`Error: ${err.message}`);
+  process.exit(1);
 });
