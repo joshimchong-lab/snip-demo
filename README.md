@@ -178,6 +178,45 @@ git rm backend
 git commit -m "Remove backend submodule"
 ```
 
+## Deployment Bundle
+
+The `bundle/` submodule contains auto-generated deployment artifacts created by `scripts/build-bundle.mjs`. This branch is meant for deployment via Docker or Railway, containing:
+
+- Unified `server.js` and `cli.js` ready to run
+- Pre-built frontend (Angular production build)
+- `.env`, `Dockerfile`, `.dockerignore`, and `railway.json` for instant deployment
+
+### Building the Bundle
+
+```bash
+# Build and assemble artifacts (no push)
+node scripts/build-bundle.mjs
+
+# Build, assemble, and push all changes
+node scripts/build-bundle.mjs --push
+```
+
+The script:
+1. Updates submodules to their branch tips
+2. Builds the frontend (`npm install` + `ng build`)
+3. Assembles `bundle/` with backend, CLI, and frontend build output
+4. Commits changes only when content differs (idempotent)
+5. Bumps submodule pointers in the superproject
+6. Pushes bundle and main branches when `--push` is used
+
+Run it without arguments to test locally; use `--push` in CI/CD to auto-deploy.
+
+### Deploy from Bundle Branch
+
+```bash
+# Docker
+docker build -t snip:latest .
+docker run -p 3000:3000 snip:latest
+
+# Railway
+# Connect this repo and select the bundle branch
+```
+
 ---
 
 For details on each layer, see the README in its subdirectory.
