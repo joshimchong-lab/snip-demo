@@ -1,13 +1,13 @@
 ﻿<main class="page">
-  <section class="card">
-    <header class="header">
-      <h1>Snip</h1>
-      <p>Create short links from your browser.</p>
+  <section class="card shell">
+    <header class="header hero">
+      <h1 class="hero-title">Snip</h1>
+      <p class="hero-subline">Create short links from your browser.</p>
     </header>
 
-    <form class="url-form" (ngSubmit)="onSubmit()">
-      <label for="url">URL</label>
-      <div class="row">
+    <form class="url-form hero-form" (ngSubmit)="onSubmit()">
+      <label for="url" class="field-label">URL</label>
+      <div class="row chat-input">
         <input
           id="url"
           name="url"
@@ -16,27 +16,27 @@
           placeholder="https://example.com"
           required
         />
-        <button type="submit" [disabled]="submitting()">
+        <button type="submit" class="primary" [disabled]="submitting()">
           {{ submitting() ? 'Creating...' : 'Shorten' }}
         </button>
       </div>
     </form>
 
     @if (createdShortUrl()) {
-      <p class="success">
+      <p class="success notice">
         Short link:
         <a [href]="createdShortUrl()" target="_blank" rel="noopener noreferrer">{{ createdShortUrl() }}</a>
       </p>
     }
 
     @if (error()) {
-      <p class="error">{{ error() }}</p>
+      <p class="error notice">{{ error() }}</p>
     }
 
-    <section>
+    <section class="links-card">
       <div class="table-header">
         <h2>All links</h2>
-        <button type="button" class="ghost" (click)="refreshLinks()" [disabled]="loading()">
+        <button type="button" class="ghost secondary" (click)="refreshLinks()" [disabled]="loading()">
           {{ loading() ? 'Loading...' : 'Refresh' }}
         </button>
       </div>
